@@ -3,113 +3,203 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>女人的秘密</title>
+  <title>秘密花园 | 私密女性社区</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="bg-orb orb-a"></div>
-  <div class="bg-orb orb-b"></div>
-
-  <main class="app-shell">
-    <section id="authView" class="auth-view">
-      <div class="brand-card">
-        <div class="logo">♡</div>
-        <p class="eyebrow">private community demo</p>
-        <h1>女人的秘密</h1>
-        <p class="lead">一个可以发布文字、图片、评论、点赞和私信的粉色社区网站原型。</p>
+  <main id="landingView" class="landing-view">
+    <section class="hero">
+      <div class="hero-media" aria-hidden="true">
+        <img src="/assets/hero-community.png" alt="" />
       </div>
-
-      <div class="auth-card glass">
-        <div class="auth-tabs">
-          <button class="tab active" data-tab="login">登录</button>
-          <button class="tab" data-tab="register">注册</button>
+      <nav class="site-nav">
+        <a class="brand" href="#landingView" aria-label="秘密花园首页">
+          <span class="brand-mark">S</span>
+          <span>秘密花园</span>
+        </a>
+        <div class="nav-actions">
+          <button class="text-btn" data-scroll-auth>登录</button>
+          <button class="solid-btn small" data-scroll-auth>注册</button>
         </div>
-
-        <form id="loginForm" class="auth-form">
-          <label>昵称 / 账号</label>
-          <input name="nickname" autocomplete="username" placeholder="例如：月光玫瑰" required />
-          <label>密码</label>
-          <input name="password" type="password" autocomplete="current-password" placeholder="输入密码" required />
-          <button class="primary" type="submit">进入秘密花园</button>
-        </form>
-
-        <form id="registerForm" class="auth-form hidden">
-          <label>设置昵称（昵称即账号）</label>
-          <input name="nickname" autocomplete="username" placeholder="2-24 位，可含中文/英文/数字" required />
-          <label>设置密码</label>
-          <input name="password" type="password" autocomplete="new-password" placeholder="至少 6 位" required />
-          <button class="primary" type="submit">创建账号</button>
-        </form>
+      </nav>
+      <div class="hero-copy">
+        <p class="eyebrow">private social community</p>
+        <h1>一个温柔、清晰、可以认真交流的私密空间</h1>
+        <p class="lead">发布心情、认识朋友、查看资料、发送私信。这里把身份、头像、个人主页和收件箱整理成真正可用的社区体验。</p>
+        <div class="hero-actions">
+          <button class="solid-btn" data-scroll-auth>创建账号</button>
+          <button class="outline-btn" data-scroll-auth>已有账号登录</button>
+        </div>
       </div>
     </section>
 
-    <section id="mainView" class="main-view hidden">
-      <header class="topbar glass">
-        <div>
-          <p class="eyebrow">community</p>
-          <h1>女人的秘密</h1>
+    <section class="intro-band" aria-label="网站功能介绍">
+      <article>
+        <span>01</span>
+        <h2>精致个人主页</h2>
+        <p>头像、昵称、简介、所在地和兴趣标签，让每个用户都有可查看的资料页。</p>
+      </article>
+      <article>
+        <span>02</span>
+        <h2>动态社区</h2>
+        <p>发布文字和图片，点赞、评论，也可以从头像快速进入对方资料。</p>
+      </article>
+      <article>
+        <span>03</span>
+        <h2>私信收件箱</h2>
+        <p>查看谁给你发过私信，打开会话继续聊天，未读消息会醒目提醒。</p>
+      </article>
+    </section>
+
+    <section id="authPanel" class="auth-section">
+      <div class="auth-copy">
+        <p class="eyebrow">join the garden</p>
+        <h2>先注册账号，再进入社区</h2>
+        <p>账号用于登录，昵称可以以后修改。你也可以在注册时上传头像，之后在个人设置里继续更换。</p>
+      </div>
+
+      <div class="auth-card">
+        <div class="segmented">
+          <button class="segment active" data-auth-tab="register">注册</button>
+          <button class="segment" data-auth-tab="login">登录</button>
         </div>
-        <div class="user-mini">
-          <span id="meBadge"></span>
-          <button id="logoutBtn" class="ghost">退出</button>
-        </div>
-      </header>
 
-      <div class="layout">
-        <aside class="left-column">
-          <section class="panel glass">
-            <h2>我的昵称</h2>
-            <form id="profileForm" class="stack-form">
-              <label>展示昵称</label>
-              <input name="displayName" maxlength="24" />
-              <label>一句话介绍</label>
-              <textarea name="bio" rows="3" maxlength="80" placeholder="写一点点关于你"></textarea>
-              <button class="secondary" type="submit">保存资料</button>
-            </form>
-          </section>
+        <form id="registerForm" class="auth-form">
+          <label>账号</label>
+          <input name="username" autocomplete="username" placeholder="3-24 位英文/数字" required />
+          <label>昵称</label>
+          <input name="nickname" autocomplete="name" placeholder="别人看到的名字" required />
+          <label>密码</label>
+          <input name="password" type="password" autocomplete="new-password" placeholder="至少 6 位" required />
+          <label>头像</label>
+          <input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+          <button class="solid-btn full" type="submit">注册并进入</button>
+        </form>
 
-          <section class="panel glass">
-            <h2>用户列表</h2>
-            <div id="usersList" class="users-list empty">暂无其他用户</div>
-          </section>
-        </aside>
-
-        <section class="feed-column">
-          <section class="composer glass">
-            <form id="postForm">
-              <textarea name="content" rows="4" maxlength="600" placeholder="写下你的秘密、心情或故事……"></textarea>
-              <div id="imagePreview" class="image-preview hidden"></div>
-              <div class="composer-actions">
-                <label class="file-chip">
-                  <input name="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
-                  选择图片
-                </label>
-                <button class="primary" type="submit">发布</button>
-              </div>
-            </form>
-          </section>
-
-          <section id="feed" class="feed"></section>
-        </section>
-
-        <aside class="right-column">
-          <section class="panel glass chat-panel">
-            <div class="chat-head">
-              <div>
-                <h2>私信</h2>
-                <p id="chatHint">从用户列表选择一个人聊天</p>
-              </div>
-            </div>
-            <div id="messagesBox" class="messages-box empty">还没有打开任何对话</div>
-            <form id="messageForm" class="message-form hidden">
-              <input name="content" maxlength="500" placeholder="输入私信内容" />
-              <button class="secondary" type="submit">发送</button>
-            </form>
-          </section>
-        </aside>
+        <form id="loginForm" class="auth-form hidden">
+          <label>账号</label>
+          <input name="username" autocomplete="username" placeholder="输入你的账号" required />
+          <label>密码</label>
+          <input name="password" type="password" autocomplete="current-password" placeholder="输入密码" required />
+          <button class="solid-btn full" type="submit">登录社区</button>
+        </form>
       </div>
     </section>
   </main>
+
+  <main id="appView" class="app-view hidden">
+    <aside class="sidebar">
+      <a class="brand app-brand" href="#" aria-label="秘密花园">
+        <span class="brand-mark">S</span>
+        <span>秘密花园</span>
+      </a>
+      <nav class="app-nav">
+        <button class="nav-item active" data-panel="feedPanel">动态</button>
+        <button class="nav-item" data-panel="peoplePanel">用户</button>
+        <button class="nav-item" data-panel="inboxPanel">私信</button>
+        <button class="nav-item" data-panel="settingsPanel">我的</button>
+      </nav>
+      <div class="me-card">
+        <button id="myAvatarBtn" class="avatar-btn" type="button"></button>
+        <div>
+          <strong id="meName"></strong>
+          <span id="meAccount"></span>
+        </div>
+      </div>
+      <button id="logoutBtn" class="outline-btn full">退出登录</button>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspace-head">
+        <div>
+          <p class="eyebrow">community</p>
+          <h1 id="panelTitle">动态</h1>
+        </div>
+        <button class="solid-btn small" data-panel-shortcut="settingsPanel">编辑资料</button>
+      </header>
+
+      <section id="feedPanel" class="panel-view active">
+        <form id="postForm" class="composer">
+          <textarea name="content" maxlength="800" rows="4" placeholder="分享一段心情、一个问题，或者今天发生的小事"></textarea>
+          <div id="imagePreview" class="image-preview hidden"></div>
+          <div class="composer-actions">
+            <label class="file-pill">
+              <input name="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+              上传图片
+            </label>
+            <button class="solid-btn small" type="submit">发布</button>
+          </div>
+        </form>
+        <div id="feed" class="feed"></div>
+      </section>
+
+      <section id="peoplePanel" class="panel-view">
+        <div class="section-head">
+          <h2>社区用户</h2>
+          <p>点击头像或卡片可以查看资料，也可以直接发私信。</p>
+        </div>
+        <div id="peopleGrid" class="people-grid"></div>
+      </section>
+
+      <section id="inboxPanel" class="panel-view">
+        <div class="section-head">
+          <h2>我的私信</h2>
+          <p>这里会显示给你发过私信的人，以及你最近联系过的人。</p>
+        </div>
+        <div class="inbox-layout">
+          <div id="threadList" class="thread-list"></div>
+          <section class="chat-card">
+            <div id="chatHeader" class="chat-header">选择一个会话</div>
+            <div id="messageList" class="message-list empty">还没有打开任何私信</div>
+            <form id="messageForm" class="message-form hidden">
+              <input name="content" maxlength="1000" placeholder="输入私信内容" />
+              <button class="solid-btn small" type="submit">发送</button>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section id="settingsPanel" class="panel-view">
+        <div class="settings-grid">
+          <form id="profileForm" class="settings-card">
+            <h2>我的资料</h2>
+            <div class="profile-preview">
+              <button id="settingsAvatar" class="avatar-btn large" type="button"></button>
+              <div>
+                <strong id="settingsName"></strong>
+                <span id="settingsAccount"></span>
+              </div>
+            </div>
+            <label>更换头像</label>
+            <input name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+            <label>昵称</label>
+            <input name="nickname" maxlength="24" required />
+            <label>一句话介绍</label>
+            <textarea name="bio" maxlength="180" rows="4"></textarea>
+            <label>所在地</label>
+            <input name="location" maxlength="24" placeholder="例如：上海" />
+            <label>兴趣标签</label>
+            <input name="interests" maxlength="120" placeholder="用逗号分隔，例如：阅读，瑜伽，电影" />
+            <button class="solid-btn full" type="submit">保存资料</button>
+          </form>
+
+          <form id="passwordForm" class="settings-card">
+            <h2>修改密码</h2>
+            <label>原密码</label>
+            <input name="oldPassword" type="password" autocomplete="current-password" required />
+            <label>新密码</label>
+            <input name="newPassword" type="password" autocomplete="new-password" required />
+            <button class="outline-btn full" type="submit">更新密码</button>
+          </form>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="profileDialog" class="profile-dialog">
+    <button class="dialog-close" data-close-dialog aria-label="关闭">×</button>
+    <div id="profileDialogBody"></div>
+  </dialog>
 
   <div id="toast" class="toast hidden"></div>
   <script src="/app.js"></script>

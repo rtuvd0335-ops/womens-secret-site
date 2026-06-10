@@ -2,45 +2,48 @@ const state = {
   me: null,
   posts: [],
   users: [],
-  currentChatUserId: null
+  threads: [],
+  currentChatUserId: null,
+  activePanel: 'feedPanel'
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
 const els = {
-  authView: $('#authView'),
-  mainView: $('#mainView'),
-  loginForm: $('#loginForm'),
+  landingView: $('#landingView'),
+  appView: $('#appView'),
   registerForm: $('#registerForm'),
+  loginForm: $('#loginForm'),
   postForm: $('#postForm'),
   profileForm: $('#profileForm'),
+  passwordForm: $('#passwordForm'),
   logoutBtn: $('#logoutBtn'),
-  meBadge: $('#meBadge'),
   feed: $('#feed'),
-  usersList: $('#usersList'),
+  peopleGrid: $('#peopleGrid'),
+  threadList: $('#threadList'),
+  messageList: $('#messageList'),
+  messageForm: $('#messageForm'),
+  chatHeader: $('#chatHeader'),
   imagePreview: $('#imagePreview'),
   toast: $('#toast'),
-  messagesBox: $('#messagesBox'),
-  messageForm: $('#messageForm'),
-  chatHint: $('#chatHint')
+  profileDialog: $('#profileDialog'),
+  profileDialogBody: $('#profileDialogBody'),
+  meName: $('#meName'),
+  meAccount: $('#meAccount'),
+  myAvatarBtn: $('#myAvatarBtn'),
+  settingsAvatar: $('#settingsAvatar'),
+  settingsName: $('#settingsName'),
+  settingsAccount: $('#settingsAccount'),
+  panelTitle: $('#panelTitle')
 };
 
-function showToast(message) {
-  els.toast.textContent = message;
-  els.toast.classList.remove('hidden');
-  clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => els.toast.classList.add('hidden'), 2600);
-}
-
-function formatTime(iso) {
-  return new Date(iso).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
+const panelTitles = {
+  feedPanel: '动态',
+  peoplePanel: '用户',
+  inboxPanel: '私信',
+  settingsPanel: '我的'
+};
 
 function escapeHtml(text) {
   return String(text || '')
@@ -51,8 +54,39 @@ function escapeHtml(text) {
     .replaceAll("'", '&#039;');
 }
 
-function avatarText(user) {
-  return (user?.displayName || user?.nickname || '?').trim().slice(0, 1).toUpperCase();
+function formatTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function showToast(message) {
+  els.toast.textContent = message;
+  els.toast.classList.remove('hidden');
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => els.toast.classList.add('hidden'), 2600);
+}
+
+function userInitial(user) {
+  return (user?.nickname || user?.username || '?').trim().slice(0, 1).toUpperCase();
+}
+
+function avatarMarkup(user, size = '') {
+  const label = escapeHtml(userInitial(user));
+  const src = user?.avatarUrl ? escapeHtml(user.avatarUrl) : '';
+  const className = `avatar ${size}`.trim();
+  return src
+    ? `<span class="${className}"><img src="${src}" alt="${escapeHtml(user.nickname || '用户头像')}" /></span>`
+    : `<span class="${className}">${label}</span>`;
+}
+
+function setAvatarButton(button, user) {
+  if (!button) return;
+  button.innerHTML = avatarMarkup(user, button.classList.contains('large') ? 'large' : '');
 }
 
 async function api(path, options = {}) {
@@ -61,33 +95,50 @@ async function api(path, options = {}) {
     headers: {},
     ...options
   };
+
   if (config.body && !(config.body instanceof FormData)) {
     config.headers['Content-Type'] = 'application/json';
     config.body = JSON.stringify(config.body);
   }
+
   const res = await fetch(path, config);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || '请求失败');
   return data;
 }
 
-function setView(loggedIn) {
-  els.authView.classList.toggle('hidden', loggedIn);
-  els.mainView.classList.toggle('hidden', !loggedIn);
+function setLoggedIn(loggedIn) {
+  els.landingView.classList.toggle('hidden', loggedIn);
+  els.appView.classList.toggle('hidden', !loggedIn);
 }
 
-async function refreshMe() {
+async function refreshAll() {
   const data = await api('/api/me');
   state.me = data.user;
-  setView(Boolean(state.me));
-  if (state.me) {
-    els.meBadge.textContent = `@${state.me.nickname}`;
-    els.profileForm.displayName.value = state.me.displayName || state.me.nickname;
-    els.profileForm.bio.value = state.me.bio || '';
-    await Promise.all([loadPosts(), loadUsers()]);
-  } else {
+  setLoggedIn(Boolean(state.me));
+
+  if (!state.me) {
     await loadPosts();
+    return;
   }
+
+  renderMe();
+  await Promise.all([loadPosts(), loadUsers(), loadThreads()]);
+  switchPanel(state.activePanel);
+}
+
+function renderMe() {
+  els.meName.textContent = state.me.nickname;
+  els.meAccount.textContent = `@${state.me.username}`;
+  els.settingsName.textContent = state.me.nickname;
+  els.settingsAccount.textContent = `@${state.me.username}`;
+  setAvatarButton(els.myAvatarBtn, state.me);
+  setAvatarButton(els.settingsAvatar, state.me);
+
+  els.profileForm.nickname.value = state.me.nickname || '';
+  els.profileForm.bio.value = state.me.bio || '';
+  els.profileForm.location.value = state.me.location || '';
+  els.profileForm.interests.value = (state.me.interests || []).join('，');
 }
 
 async function loadPosts() {
@@ -103,137 +154,204 @@ async function loadUsers() {
   renderUsers();
 }
 
+async function loadThreads() {
+  if (!state.me) return;
+  const data = await api('/api/messages/threads');
+  state.threads = data.threads || [];
+  renderThreads();
+}
+
+function switchPanel(panelId) {
+  state.activePanel = panelId;
+  $$('.panel-view').forEach((panel) => panel.classList.toggle('active', panel.id === panelId));
+  $$('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.panel === panelId));
+  els.panelTitle.textContent = panelTitles[panelId] || '社区';
+}
+
 function renderPosts() {
   if (!state.posts.length) {
-    els.feed.innerHTML = '<div class="empty">还没有秘密。成为第一个发布的人吧。</div>';
+    els.feed.innerHTML = '<div class="empty-state">还没有动态。发布第一条内容，让社区开始呼吸。</div>';
     return;
   }
 
-  els.feed.innerHTML = state.posts.map(post => {
-    const author = post.author || { displayName: '已注销用户', nickname: 'unknown' };
-    const comments = post.comments.map(comment => {
-      const ca = comment.author || { displayName: '已注销用户' };
+  els.feed.innerHTML = state.posts.map((post) => {
+    const author = post.author || { id: 0, nickname: '已注销用户', username: 'unknown' };
+    const comments = (post.comments || []).map((comment) => {
+      const ca = comment.author || { nickname: '已注销用户' };
       return `
         <div class="comment">
-          <strong>${escapeHtml(ca.displayName)}</strong>
-          <span class="meta">${formatTime(comment.createdAt)}</span>
-          <div>${escapeHtml(comment.content)}</div>
+          <button class="inline-user" data-user-id="${ca.id || ''}" type="button">${escapeHtml(ca.nickname)}</button>
+          <span>${escapeHtml(comment.content)}</span>
+          <small>${formatTime(comment.createdAt)}</small>
         </div>`;
     }).join('');
 
     return `
       <article class="post-card" data-post-id="${post.id}">
-        <div class="post-head">
-          <div class="avatar">${escapeHtml(avatarText(author))}</div>
+        <header class="post-head">
+          <button class="avatar-btn" data-user-id="${author.id}" type="button">${avatarMarkup(author)}</button>
           <div>
-            <div class="name">${escapeHtml(author.displayName)}</div>
-            <div class="meta">@${escapeHtml(author.nickname)} · ${formatTime(post.createdAt)}</div>
+            <button class="name-link" data-user-id="${author.id}" type="button">${escapeHtml(author.nickname)}</button>
+            <span>@${escapeHtml(author.username)} · ${formatTime(post.createdAt)}</span>
           </div>
-        </div>
+        </header>
         ${post.content ? `<div class="post-content">${escapeHtml(post.content)}</div>` : ''}
-        ${post.imageUrl ? `<img class="post-image" src="${escapeHtml(post.imageUrl)}" alt="用户上传图片" loading="lazy" />` : ''}
+        ${post.imageUrl ? `<img class="post-image" src="${escapeHtml(post.imageUrl)}" alt="用户发布的图片" loading="lazy" />` : ''}
         <div class="post-actions">
-          <button class="action-btn like-btn ${post.likedByMe ? 'liked' : ''}" data-action="like">♡ ${post.likesCount}</button>
-          <button class="action-btn" data-action="focus-comment">评论 ${post.comments.length}</button>
+          <button class="chip-btn ${post.likedByMe ? 'active' : ''}" data-action="like" type="button">喜欢 ${post.likesCount}</button>
+          <button class="chip-btn" data-action="focus-comment" type="button">评论 ${post.comments.length}</button>
         </div>
-        <div class="comments">
-          ${comments || '<div class="meta">暂无评论</div>'}
-          <form class="comment-form" data-action="comment">
-            <input name="content" maxlength="260" placeholder="写评论……" ${state.me ? '' : 'disabled'} />
-            <button class="secondary" type="submit" ${state.me ? '' : 'disabled'}>发送</button>
-          </form>
+        <div class="comment-list">
+          ${comments || '<p class="muted">还没有评论</p>'}
         </div>
+        <form class="comment-form">
+          <input name="content" maxlength="280" placeholder="写评论" ${state.me ? '' : 'disabled'} />
+          <button class="outline-btn small" type="submit" ${state.me ? '' : 'disabled'}>发送</button>
+        </form>
       </article>`;
   }).join('');
 }
 
 function renderUsers() {
   if (!state.users.length) {
-    els.usersList.className = 'users-list empty';
-    els.usersList.textContent = '暂无其他用户，注册另一个账号后可测试私信。';
+    els.peopleGrid.innerHTML = '<div class="empty-state">还没有其他用户。可以让朋友注册后一起测试资料页和私信。</div>';
     return;
   }
 
-  els.usersList.className = 'users-list';
-  els.usersList.innerHTML = state.users.map(user => `
-    <button class="user-row ${state.currentChatUserId === user.id ? 'active' : ''}" data-user-id="${user.id}">
-      <span class="avatar">${escapeHtml(avatarText(user))}</span>
+  els.peopleGrid.innerHTML = state.users.map((user) => `
+    <article class="person-card" data-user-id="${user.id}">
+      <button class="avatar-btn large" data-user-id="${user.id}" type="button">${avatarMarkup(user, 'large')}</button>
+      <div>
+        <h3>${escapeHtml(user.nickname)}</h3>
+        <p>@${escapeHtml(user.username)}</p>
+      </div>
+      <p class="bio">${escapeHtml(user.bio || '这个人还没有写简介。')}</p>
+      <div class="tags">${(user.interests || []).map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+      <div class="card-actions">
+        <button class="outline-btn small" data-action="profile" type="button">查看资料</button>
+        <button class="solid-btn small" data-action="message" type="button">私信</button>
+      </div>
+      ${user.unreadCount ? `<span class="badge">${user.unreadCount}</span>` : ''}
+    </article>
+  `).join('');
+}
+
+function renderThreads() {
+  if (!state.threads.length) {
+    els.threadList.innerHTML = '<div class="empty-state">还没有私信。去用户列表里选择一个人开始聊天。</div>';
+    return;
+  }
+
+  els.threadList.innerHTML = state.threads.map((thread) => `
+    <button class="thread-row ${state.currentChatUserId === thread.user.id ? 'active' : ''}" data-user-id="${thread.user.id}" type="button">
+      ${avatarMarkup(thread.user)}
       <span>
-        <span class="name">${escapeHtml(user.displayName)}</span>
-        <span class="meta">@${escapeHtml(user.nickname)}</span>
+        <strong>${escapeHtml(thread.user.nickname)}</strong>
+        <small>${escapeHtml(thread.lastMessage)}</small>
       </span>
+      ${thread.unreadCount ? `<em>${thread.unreadCount}</em>` : ''}
     </button>
   `).join('');
 }
 
+async function openProfile(userId) {
+  const data = await api(`/api/users/${userId}`);
+  const user = data.user;
+  const recentPosts = data.recentPosts || [];
+  els.profileDialogBody.innerHTML = `
+    <section class="dialog-profile">
+      ${avatarMarkup(user, 'xl')}
+      <h2>${escapeHtml(user.nickname)}</h2>
+      <p>@${escapeHtml(user.username)}</p>
+      <div class="profile-stats">
+        <span><strong>${user.postsCount}</strong>动态</span>
+        <span><strong>${formatTime(user.createdAt)}</strong>加入</span>
+      </div>
+      <p class="bio">${escapeHtml(user.bio || '这个人还没有写简介。')}</p>
+      ${user.location ? `<p class="muted">所在地：${escapeHtml(user.location)}</p>` : ''}
+      <div class="tags">${(user.interests || []).map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+      ${state.me?.id !== user.id ? `<button class="solid-btn full" data-dialog-message="${user.id}" type="button">给她发私信</button>` : ''}
+    </section>
+    <section class="dialog-posts">
+      <h3>最近动态</h3>
+      ${recentPosts.length ? recentPosts.map((post) => `<p>${escapeHtml(post.content || '发布了一张图片')}</p>`).join('') : '<p class="muted">暂无动态</p>'}
+    </section>
+  `;
+  els.profileDialog.showModal();
+}
+
 async function openChat(userId) {
   state.currentChatUserId = Number(userId);
-  renderUsers();
   const data = await api(`/api/messages/${state.currentChatUserId}`);
-  els.chatHint.textContent = `正在和 ${data.other.displayName} 私信`;
+  els.chatHeader.innerHTML = `${avatarMarkup(data.other)}<strong>${escapeHtml(data.other.nickname)}</strong><span>@${escapeHtml(data.other.username)}</span>`;
   els.messageForm.classList.remove('hidden');
   renderMessages(data.messages || []);
+  await Promise.all([loadThreads(), loadUsers()]);
+  switchPanel('inboxPanel');
 }
 
 function renderMessages(messages) {
   if (!messages.length) {
-    els.messagesBox.className = 'messages-box empty';
-    els.messagesBox.textContent = '还没有私信，发一句开始聊天吧。';
+    els.messageList.className = 'message-list empty';
+    els.messageList.textContent = '还没有消息。写一句话开始聊天。';
     return;
   }
-  els.messagesBox.className = 'messages-box';
-  els.messagesBox.innerHTML = messages.map(msg => `
-    <div class="message ${msg.mine ? 'mine' : ''}">
-      <div>${escapeHtml(msg.content)}</div>
-      <div class="meta">${formatTime(msg.createdAt)}</div>
+
+  els.messageList.className = 'message-list';
+  els.messageList.innerHTML = messages.map((message) => `
+    <div class="message ${message.mine ? 'mine' : ''}">
+      <p>${escapeHtml(message.content)}</p>
+      <small>${formatTime(message.createdAt)}</small>
     </div>
   `).join('');
-  els.messagesBox.scrollTop = els.messagesBox.scrollHeight;
+  els.messageList.scrollTop = els.messageList.scrollHeight;
 }
 
-function switchTab(tabName) {
-  $$('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
-  els.loginForm.classList.toggle('hidden', tabName !== 'login');
-  els.registerForm.classList.toggle('hidden', tabName !== 'register');
+function resetAuthForms() {
+  els.registerForm.reset();
+  els.loginForm.reset();
 }
 
-$$('.tab').forEach(btn => {
-  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+$$('[data-scroll-auth]').forEach((button) => {
+  button.addEventListener('click', () => $('#authPanel').scrollIntoView({ behavior: 'smooth', block: 'start' }));
 });
 
-els.loginForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = new FormData(els.loginForm);
+$$('[data-auth-tab]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const tab = button.dataset.authTab;
+    $$('[data-auth-tab]').forEach((item) => item.classList.toggle('active', item.dataset.authTab === tab));
+    els.registerForm.classList.toggle('hidden', tab !== 'register');
+    els.loginForm.classList.toggle('hidden', tab !== 'login');
+  });
+});
+
+$$('[data-panel], [data-panel-shortcut]').forEach((button) => {
+  button.addEventListener('click', () => switchPanel(button.dataset.panel || button.dataset.panelShortcut));
+});
+
+els.registerForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
   try {
-    await api('/api/login', {
-      method: 'POST',
-      body: {
-        nickname: form.get('nickname'),
-        password: form.get('password')
-      }
-    });
-    els.loginForm.reset();
-    showToast('登录成功');
-    await refreshMe();
+    await api('/api/register', { method: 'POST', body: new FormData(els.registerForm) });
+    resetAuthForms();
+    showToast('注册成功，欢迎来到秘密花园');
+    await refreshAll();
   } catch (err) {
     showToast(err.message);
   }
 });
 
-els.registerForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = new FormData(els.registerForm);
+els.loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = new FormData(els.loginForm);
   try {
-    await api('/api/register', {
+    await api('/api/login', {
       method: 'POST',
-      body: {
-        nickname: form.get('nickname'),
-        password: form.get('password')
-      }
+      body: { username: form.get('username'), password: form.get('password') }
     });
-    els.registerForm.reset();
-    showToast('注册成功');
-    await refreshMe();
+    resetAuthForms();
+    showToast('登录成功');
+    await refreshAll();
   } catch (err) {
     showToast(err.message);
   }
@@ -244,31 +362,9 @@ els.logoutBtn.addEventListener('click', async () => {
     await api('/api/logout', { method: 'POST' });
     state.me = null;
     state.currentChatUserId = null;
-    els.messageForm.classList.add('hidden');
-    els.messagesBox.className = 'messages-box empty';
-    els.messagesBox.textContent = '还没有打开任何对话';
     showToast('已退出登录');
-    await refreshMe();
-  } catch (err) {
-    showToast(err.message);
-  }
-});
-
-els.profileForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = new FormData(els.profileForm);
-  try {
-    const data = await api('/api/profile', {
-      method: 'PATCH',
-      body: {
-        displayName: form.get('displayName'),
-        bio: form.get('bio')
-      }
-    });
-    state.me = data.user;
-    els.meBadge.textContent = `@${state.me.nickname}`;
-    showToast('资料已保存');
-    await Promise.all([loadPosts(), loadUsers()]);
+    await refreshAll();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (err) {
     showToast(err.message);
   }
@@ -281,17 +377,16 @@ els.postForm.image.addEventListener('change', () => {
     els.imagePreview.innerHTML = '';
     return;
   }
-  const url = URL.createObjectURL(file);
-  els.imagePreview.innerHTML = `<img src="${url}" alt="预览" />`;
+  els.imagePreview.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="图片预览" />`;
   els.imagePreview.classList.remove('hidden');
 });
 
-els.postForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!state.me) return showToast('请先登录再发布');
-  const form = new FormData(els.postForm);
+els.postForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!state.me) return showToast('请先登录');
+
   try {
-    await api('/api/posts', { method: 'POST', body: form });
+    await api('/api/posts', { method: 'POST', body: new FormData(els.postForm) });
     els.postForm.reset();
     els.imagePreview.innerHTML = '';
     els.imagePreview.classList.add('hidden');
@@ -302,38 +397,39 @@ els.postForm.addEventListener('submit', async (e) => {
   }
 });
 
-els.feed.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  const card = e.target.closest('.post-card');
-  const postId = card?.dataset.postId;
-  if (!postId) return;
-
-  if (btn.dataset.action === 'like') {
-    if (!state.me) return showToast('请先登录再点赞');
-    try {
-      await api(`/api/posts/${postId}/like`, { method: 'POST' });
-      await loadPosts();
-    } catch (err) {
-      showToast(err.message);
-    }
+els.feed.addEventListener('click', async (event) => {
+  const userButton = event.target.closest('[data-user-id]');
+  if (userButton && userButton.dataset.userId) {
+    await openProfile(userButton.dataset.userId).catch((err) => showToast(err.message));
+    return;
   }
 
-  if (btn.dataset.action === 'focus-comment') {
+  const button = event.target.closest('button[data-action]');
+  const card = event.target.closest('.post-card');
+  if (!button || !card) return;
+  const postId = card.dataset.postId;
+
+  if (button.dataset.action === 'like') {
+    if (!state.me) return showToast('请先登录再点赞');
+    await api(`/api/posts/${postId}/like`, { method: 'POST' }).catch((err) => showToast(err.message));
+    await loadPosts();
+  }
+
+  if (button.dataset.action === 'focus-comment') {
     $('input[name="content"]', card)?.focus();
   }
 });
 
-els.feed.addEventListener('submit', async (e) => {
-  const form = e.target.closest('.comment-form');
+els.feed.addEventListener('submit', async (event) => {
+  const form = event.target.closest('.comment-form');
   if (!form) return;
-  e.preventDefault();
+  event.preventDefault();
   if (!state.me) return showToast('请先登录再评论');
+
   const card = form.closest('.post-card');
-  const postId = card?.dataset.postId;
   const content = new FormData(form).get('content');
   try {
-    await api(`/api/posts/${postId}/comments`, { method: 'POST', body: { content } });
+    await api(`/api/posts/${card.dataset.postId}/comments`, { method: 'POST', body: { content } });
     form.reset();
     await loadPosts();
   } catch (err) {
@@ -341,20 +437,30 @@ els.feed.addEventListener('submit', async (e) => {
   }
 });
 
-els.usersList.addEventListener('click', async (e) => {
-  const row = e.target.closest('.user-row');
-  if (!row) return;
-  try {
-    await openChat(row.dataset.userId);
-  } catch (err) {
-    showToast(err.message);
+els.peopleGrid.addEventListener('click', async (event) => {
+  const card = event.target.closest('.person-card');
+  const id = event.target.closest('[data-user-id]')?.dataset.userId || card?.dataset.userId;
+  if (!id) return;
+
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'message') {
+    await openChat(id).catch((err) => showToast(err.message));
+  } else {
+    await openProfile(id).catch((err) => showToast(err.message));
   }
 });
 
-els.messageForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!state.currentChatUserId) return showToast('请先选择聊天对象');
+els.threadList.addEventListener('click', async (event) => {
+  const row = event.target.closest('.thread-row');
+  if (!row) return;
+  await openChat(row.dataset.userId).catch((err) => showToast(err.message));
+});
+
+els.messageForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!state.currentChatUserId) return showToast('请先选择会话');
   const content = new FormData(els.messageForm).get('content');
+
   try {
     await api('/api/messages', {
       method: 'POST',
@@ -367,4 +473,52 @@ els.messageForm.addEventListener('submit', async (e) => {
   }
 });
 
-refreshMe().catch(err => showToast(err.message));
+els.profileForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    const data = await api('/api/profile', { method: 'PATCH', body: new FormData(els.profileForm) });
+    state.me = data.user;
+    renderMe();
+    showToast('资料已保存');
+    await Promise.all([loadPosts(), loadUsers(), loadThreads()]);
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+els.passwordForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = new FormData(els.passwordForm);
+  try {
+    await api('/api/password', {
+      method: 'PATCH',
+      body: {
+        oldPassword: form.get('oldPassword'),
+        newPassword: form.get('newPassword')
+      }
+    });
+    els.passwordForm.reset();
+    showToast('密码已更新');
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+els.myAvatarBtn.addEventListener('click', () => switchPanel('settingsPanel'));
+els.settingsAvatar.addEventListener('click', () => els.profileForm.avatar.click());
+
+els.profileDialog.addEventListener('click', async (event) => {
+  if (event.target.matches('[data-close-dialog]')) {
+    els.profileDialog.close();
+    return;
+  }
+
+  const messageButton = event.target.closest('[data-dialog-message]');
+  if (messageButton) {
+    const userId = messageButton.dataset.dialogMessage;
+    els.profileDialog.close();
+    await openChat(userId).catch((err) => showToast(err.message));
+  }
+});
+
+refreshAll().catch((err) => showToast(err.message));
