@@ -1,52 +1,58 @@
-# 女人的秘密 - 本地演示网站
+# 秘密花园
 
-这是一个可在本地运行的社区网站演示版，包含：
+一个 Node.js + Express 社区网站，支持注册登录、头像、资料页、动态、评论、点赞和私信。
 
-- 昵称注册：昵称即账号，自行设置密码
-- 登录 / 退出登录
-- 发布文字内容
-- 发布图片
-- 评论
-- 点赞 / 取消点赞
-- 私信
-- 用户列表
-- 移动端友好的粉色主题界面
-
-> 说明：我没有按“完全不做安全隐私防护”来实现，因为那会导致密码明文保存、任意文件上传、账号冒用等明显风险。此版本保留了最基础的保护：密码哈希、图片上传类型/大小限制、登录会话、基础输入长度限制。它仍然只是本地学习 / 原型演示版，不适合直接上线。
-
-## 运行方法
-
-1. 安装 Node.js 18 或更高版本。
-2. 在本项目目录执行：
+## 本地运行
 
 ```bash
 npm install
 npm start
 ```
 
-3. 打开浏览器访问：
+打开：
 
 ```text
 http://localhost:3000
 ```
 
-## 项目结构
+## 数据存储
+
+项目现在支持两种模式：
+
+1. 没有配置环境变量时：使用本地 `data/db.json` 和 `public/uploads/`，只适合本地测试。
+2. 配置云端环境变量后：文字数据进入 PostgreSQL，头像和图片进入 Cloudinary，适合线上使用。
+
+## 线上环境变量
+
+在 Render 的网站服务里进入 `Environment`，添加：
 
 ```text
-womens-secret-site/
-├── server.js              # 后端接口与数据存储
-├── package.json           # 依赖与启动脚本
-├── data/db.json           # 首次运行后自动生成的本地数据文件
-└── public/
-    ├── index.html         # 页面结构
-    ├── styles.css         # 页面样式
-    ├── app.js             # 前端交互
-    └── uploads/           # 用户上传图片保存目录
+SESSION_SECRET=一串很长的随机字符
+DATABASE_URL=你的 PostgreSQL 连接地址
+PGSSL=true
+CLOUDINARY_CLOUD_NAME=你的 Cloudinary cloud name
+CLOUDINARY_API_KEY=你的 Cloudinary api key
+CLOUDINARY_API_SECRET=你的 Cloudinary api secret
 ```
 
-## 注意事项
+如果你使用 Cloudinary 的单条连接地址，也可以只设置：
 
-- 这是演示用 JSON 文件数据库，数据量大时应改成 MySQL / PostgreSQL / SQLite。
-- 上传图片会保存在 `public/uploads/`。
-- 删除 `data/db.json` 可重置用户、帖子、评论、点赞和私信。
-- 若要上线，请增加 HTTPS、CSRF 防护、验证码、举报/封禁、隐私设置、内容审核、速率限制、日志审计等功能。
+```text
+CLOUDINARY_URL=cloudinary://...
+```
+
+设置完成后，重新部署网站。
+
+## 从本地 JSON 导入 PostgreSQL
+
+先设置 `DATABASE_URL`，然后执行：
+
+```bash
+npm run import:json
+```
+
+这个脚本会把本地 `data/db.json` 里的用户、帖子、评论、点赞和私信导入 PostgreSQL。
+
+## 注意
+
+Render 免费 Web Service 的本地文件系统不是长期存储。正式使用时不要依赖 `data/db.json` 或 `public/uploads/` 保存用户数据。
