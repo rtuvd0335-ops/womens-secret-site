@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
@@ -570,7 +571,15 @@ async function uploadImage(file, folder) {
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+const sessionStore = USE_POSTGRES ? new pgSession({
+  pool,
+  tableName: 'user_sessions',
+  createTableIfMissing: true
+}) : undefined;
+
 app.use(session({
+  store: sessionStore,
   name: 'secret_garden.sid',
   secret: process.env.SESSION_SECRET || 'local-demo-change-this-secret',
   resave: false,

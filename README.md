@@ -24,12 +24,17 @@ http://localhost:3000
 
 ## 线上环境变量
 
-在 Render 的网站服务里进入 `Environment`，添加：
+当前 `render.yaml` 会让 Render 自动创建 PostgreSQL，并自动设置：
 
 ```text
-SESSION_SECRET=一串很长的随机字符
-DATABASE_URL=你的 PostgreSQL 连接地址
+DATABASE_URL
 PGSSL=true
+SESSION_SECRET
+```
+
+图片存储还需要你在 Render 的网站服务里进入 `Environment`，添加 Cloudinary 相关变量：
+
+```text
 CLOUDINARY_CLOUD_NAME=你的 Cloudinary cloud name
 CLOUDINARY_API_KEY=你的 Cloudinary api key
 CLOUDINARY_API_SECRET=你的 Cloudinary api secret
@@ -41,7 +46,7 @@ CLOUDINARY_API_SECRET=你的 Cloudinary api secret
 CLOUDINARY_URL=cloudinary://...
 ```
 
-设置完成后，重新部署网站。
+设置完成后，重新部署网站。没有 Cloudinary 配置时，图片仍然会临时保存到 `public/uploads/`，不适合长期使用。
 
 ## 从本地 JSON 导入 PostgreSQL
 

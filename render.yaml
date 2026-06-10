@@ -9,7 +9,9 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: womens-secret-db
+          property: connectionString
       - key: PGSSL
         value: true
       - key: CLOUDINARY_CLOUD_NAME
@@ -18,3 +20,9 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+
+databases:
+  - name: womens-secret-db
+    plan: free
+    databaseName: womens_secret
+    user: womens_secret
