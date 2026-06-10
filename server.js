@@ -593,6 +593,14 @@ app.use(session({
 }));
 app.use(express.static(PUBLIC_DIR));
 
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    database: USE_POSTGRES ? 'postgres' : 'local-json',
+    images: USE_CLOUDINARY ? 'cloudinary' : 'local-uploads'
+  });
+});
+
 async function currentUser(req) {
   if (!req.session.userId) return null;
   return getUserById(req.session.userId);
