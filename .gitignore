@@ -1,0 +1,12 @@
+node_modules/
+.tools/
+
+server.log
+server.err.log
+npm-debug.log*
+
+data/*.json
+!data/.gitkeep
+
+public/uploads/*
+!public/uploads/.gitkeep

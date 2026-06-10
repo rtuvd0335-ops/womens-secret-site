@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>女人的秘密</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <main class="app-shell">
+    <section id="authView" class="auth-view">
+      <div class="brand-card">
+        <div class="logo">♡</div>
+        <p class="eyebrow">private community demo</p>
+        <h1>女人的秘密</h1>
+        <p class="lead">一个可以发布文字、图片、评论、点赞和私信的粉色社区网站原型。</p>
+      </div>
+
+      <div class="auth-card glass">
+        <div class="auth-tabs">
+          <button class="tab active" data-tab="login">登录</button>
+          <button class="tab" data-tab="register">注册</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>昵称 / 账号</label>
+          <input name="nickname" autocomplete="username" placeholder="例如：月光玫瑰" required />
+          <label>密码</label>
+          <input name="password" type="password" autocomplete="current-password" placeholder="输入密码" required />
+          <button class="primary" type="submit">进入秘密花园</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden">
+          <label>设置昵称（昵称即账号）</label>
+          <input name="nickname" autocomplete="username" placeholder="2-24 位，可含中文/英文/数字" required />
+          <label>设置密码</label>
+          <input name="password" type="password" autocomplete="new-password" placeholder="至少 6 位" required />
+          <button class="primary" type="submit">创建账号</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="mainView" class="main-view hidden">
+      <header class="topbar glass">
+        <div>
+          <p class="eyebrow">community</p>
+          <h1>女人的秘密</h1>
+        </div>
+        <div class="user-mini">
+          <span id="meBadge"></span>
+          <button id="logoutBtn" class="ghost">退出</button>
+        </div>
+      </header>
+
+      <div class="layout">
+        <aside class="left-column">
+          <section class="panel glass">
+            <h2>我的昵称</h2>
+            <form id="profileForm" class="stack-form">
+              <label>展示昵称</label>
+              <input name="displayName" maxlength="24" />
+              <label>一句话介绍</label>
+              <textarea name="bio" rows="3" maxlength="80" placeholder="写一点点关于你"></textarea>
+              <button class="secondary" type="submit">保存资料</button>
+            </form>
+          </section>
+
+          <section class="panel glass">
+            <h2>用户列表</h2>
+            <div id="usersList" class="users-list empty">暂无其他用户</div>
+          </section>
+        </aside>
+
+        <section class="feed-column">
+          <section class="composer glass">
+            <form id="postForm">
+              <textarea name="content" rows="4" maxlength="600" placeholder="写下你的秘密、心情或故事……"></textarea>
+              <div id="imagePreview" class="image-preview hidden"></div>
+              <div class="composer-actions">
+                <label class="file-chip">
+                  <input name="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+                  选择图片
+                </label>
+                <button class="primary" type="submit">发布</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="feed" class="feed"></section>
+        </section>
+
+        <aside class="right-column">
+          <section class="panel glass chat-panel">
+            <div class="chat-head">
+              <div>
+                <h2>私信</h2>
+                <p id="chatHint">从用户列表选择一个人聊天</p>
+              </div>
+            </div>
+            <div id="messagesBox" class="messages-box empty">还没有打开任何对话</div>
+            <form id="messageForm" class="message-form hidden">
+              <input name="content" maxlength="500" placeholder="输入私信内容" />
+              <button class="secondary" type="submit">发送</button>
+            </form>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
