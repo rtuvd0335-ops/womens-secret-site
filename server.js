@@ -22,6 +22,12 @@ const USE_CLOUDINARY = Boolean(
   process.env.CLOUDINARY_URL ||
   (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
 );
+const ADMIN_USERNAMES = new Set(
+  String(process.env.ADMIN_USERNAMES || '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -41,7 +47,8 @@ const defaultDb = {
   comments: [],
   likes: [],
   messages: [],
-  counters: { user: 1, post: 1, comment: 1, message: 1 }
+  reports: [],
+  counters: { user: 1, post: 1, comment: 1, message: 1, report: 1 }
 };
 
 function cloneDefaultDb() {
@@ -86,6 +93,7 @@ function migrateJsonDb(source) {
   db.comments = Array.isArray(db.comments) ? db.comments : [];
   db.likes = Array.isArray(db.likes) ? db.likes : [];
   db.messages = Array.isArray(db.messages) ? db.messages : [];
+  db.reports = Array.isArray(db.reports) ? db.reports : [];
   db.counters = { ...cloneDefaultDb().counters, ...(db.counters || {}) };
 
   db.users = db.users.map((user) => {
@@ -101,6 +109,7 @@ function migrateJsonDb(source) {
       bio: cleanText(user.bio, 180).trim(),
       location: cleanText(user.location, 24).trim(),
       interests: normalizeInterests(user.interests || ''),
+      bannedAt: user.bannedAt || null,
       createdAt: user.createdAt || now(),
       updatedAt: user.updatedAt || user.createdAt || now()
     };
@@ -137,10 +146,19 @@ function migrateJsonDb(source) {
     readAt: message.readAt || null
   })).filter((message) => message.id && message.fromUserId && message.toUserId && message.content);
 
+  db.reports = db.reports.map((report) => ({
+    id: Number(report.id),
+    postId: Number(report.postId),
+    userId: Number(report.userId),
+    reason: cleanText(report.reason, 500).trim(),
+    createdAt: report.createdAt || now()
+  })).filter((report) => report.id && report.postId && report.userId && report.reason);
+
   db.counters.user = Math.max(db.counters.user, nextCounter(db.users));
   db.counters.post = Math.max(db.counters.post, nextCounter(db.posts));
   db.counters.comment = Math.max(db.counters.comment, nextCounter(db.comments));
   db.counters.message = Math.max(db.counters.message, nextCounter(db.messages));
+  db.counters.report = Math.max(db.counters.report || 1, nextCounter(db.reports));
   return db;
 }
 
@@ -184,6 +202,7 @@ function rowUser(row) {
     bio: row.bio || '',
     location: row.location || '',
     interests: row.interests || [],
+    bannedAt: row.banned_at ? (row.banned_at instanceof Date ? row.banned_at.toISOString() : row.banned_at) : null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at
   };
@@ -220,6 +239,22 @@ function rowMessage(row) {
   };
 }
 
+function rowReport(row) {
+  return {
+    id: Number(row.id),
+    postId: Number(row.post_id),
+    userId: Number(row.user_id),
+    reason: row.reason || '',
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
+  };
+}
+
+function isAdminUser(user) {
+  if (!user) return false;
+  if (ADMIN_USERNAMES.has(String(user.username || '').toLowerCase())) return true;
+  return ADMIN_USERNAMES.size === 0 && Number(user.id) === 1;
+}
+
 function publicUser(user, viewerId = null, context = {}) {
   if (!user) return null;
   const postsCount = context.postsCount?.get(user.id) ?? 0;
@@ -234,6 +269,8 @@ function publicUser(user, viewerId = null, context = {}) {
     location: user.location || '',
     interests: user.interests || [],
     createdAt: user.createdAt,
+    isAdmin: isAdminUser(user),
+    bannedAt: user.bannedAt || null,
     postsCount,
     unreadCount
   };
@@ -271,9 +308,12 @@ async function initPostgres() {
       bio TEXT NOT NULL DEFAULT '',
       location TEXT NOT NULL DEFAULT '',
       interests TEXT[] NOT NULL DEFAULT '{}',
+      banned_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS posts (
       id SERIAL PRIMARY KEY,
@@ -307,10 +347,19 @@ async function initPostgres() {
       read_at TIMESTAMPTZ
     );
 
+    CREATE TABLE IF NOT EXISTS reports (
+      id SERIAL PRIMARY KEY,
+      post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_messages_users_created ON messages(from_user_id, to_user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_to_unread ON messages(to_user_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
   `);
 }
 
@@ -332,19 +381,21 @@ async function getUserByUsername(username) {
 
 async function getAllData() {
   if (USE_POSTGRES) {
-    const [users, posts, comments, likes, messages] = await Promise.all([
+    const [users, posts, comments, likes, messages, reports] = await Promise.all([
       pool.query('SELECT * FROM users'),
       pool.query('SELECT * FROM posts ORDER BY created_at DESC'),
       pool.query('SELECT * FROM comments ORDER BY created_at ASC'),
       pool.query('SELECT post_id, user_id, created_at FROM likes'),
-      pool.query('SELECT * FROM messages ORDER BY created_at DESC')
+      pool.query('SELECT * FROM messages ORDER BY created_at DESC'),
+      pool.query('SELECT * FROM reports ORDER BY created_at DESC')
     ]);
     return {
       users: users.rows.map(rowUser),
       posts: posts.rows.map(rowPost),
       comments: comments.rows.map(rowComment),
       likes: likes.rows.map((row) => ({ postId: Number(row.post_id), userId: Number(row.user_id), createdAt: row.created_at })),
-      messages: messages.rows.map(rowMessage)
+      messages: messages.rows.map(rowMessage),
+      reports: reports.rows.map(rowReport)
     };
   }
   return localDb;
@@ -371,10 +422,50 @@ async function createUser(data) {
     bio: '',
     location: '',
     interests: [],
+    bannedAt: null,
     createdAt: now(),
     updatedAt: now()
   };
   localDb.users.push(user);
+  saveJsonDb(localDb);
+  return user;
+}
+
+async function createReport(data) {
+  if (USE_POSTGRES) {
+    const result = await pool.query(
+      'INSERT INTO reports (post_id, user_id, reason) VALUES ($1, $2, $3) RETURNING *',
+      [data.postId, data.userId, data.reason]
+    );
+    return rowReport(result.rows[0]);
+  }
+  const report = { id: localDb.counters.report++, postId: data.postId, userId: data.userId, reason: data.reason, createdAt: now() };
+  localDb.reports.push(report);
+  saveJsonDb(localDb);
+  return report;
+}
+
+async function deletePost(postId) {
+  if (USE_POSTGRES) {
+    await pool.query('DELETE FROM posts WHERE id = $1', [postId]);
+    return;
+  }
+  localDb.posts = localDb.posts.filter((post) => post.id !== postId);
+  localDb.comments = localDb.comments.filter((comment) => comment.postId !== postId);
+  localDb.likes = localDb.likes.filter((like) => like.postId !== postId);
+  localDb.reports = localDb.reports.filter((report) => report.postId !== postId);
+  saveJsonDb(localDb);
+}
+
+async function banUser(userId) {
+  if (USE_POSTGRES) {
+    const result = await pool.query('UPDATE users SET banned_at = now(), updated_at = now() WHERE id = $1 RETURNING *', [userId]);
+    return rowUser(result.rows[0]);
+  }
+  const user = localDb.users.find((item) => item.id === userId);
+  if (!user) return null;
+  user.bannedAt = now();
+  user.updatedAt = now();
   saveJsonDb(localDb);
   return user;
 }
@@ -597,7 +688,9 @@ app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     database: USE_POSTGRES ? 'postgres' : 'local-json',
-    images: USE_CLOUDINARY ? 'cloudinary' : 'local-uploads'
+    images: USE_CLOUDINARY ? 'cloudinary' : 'local-uploads',
+    adminConfigured: ADMIN_USERNAMES.size > 0,
+    firstUserAdminFallback: ADMIN_USERNAMES.size === 0
   });
 });
 
@@ -610,6 +703,20 @@ async function requireLogin(req, res, next) {
   try {
     const user = await currentUser(req);
     if (!user) return res.status(401).json({ error: '请先登录' });
+    if (user.bannedAt) return res.status(403).json({ error: '该账号已被封禁' });
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function requireAdmin(req, res, next) {
+  try {
+    const user = await currentUser(req);
+    if (!user) return res.status(401).json({ error: '请先登录' });
+    if (user.bannedAt) return res.status(403).json({ error: '该账号已被封禁' });
+    if (!isAdminUser(user)) return res.status(403).json({ error: '需要管理员权限' });
     req.user = user;
     next();
   } catch (err) {
@@ -660,6 +767,7 @@ app.post('/api/login', async (req, res, next) => {
     const password = String(req.body.password || '');
     const user = await getUserByUsername(account);
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ error: '账号或密码错误' });
+    if (user.bannedAt) return res.status(403).json({ error: '该账号已被封禁' });
 
     req.session.userId = user.id;
     res.json({ user: publicUser(user, user.id) });
@@ -790,6 +898,70 @@ app.post('/api/posts/:id/like', requireLogin, async (req, res, next) => {
     await toggleLike(postId, req.user.id);
     const data = await getAllData();
     res.json({ post: postDto(post, req.user.id, data) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/reports', requireLogin, async (req, res, next) => {
+  try {
+    const postId = Number(req.body.postId);
+    const post = await findPost(postId);
+    if (!post) return res.status(404).json({ error: '帖子不存在' });
+
+    const reason = cleanText(req.body.reason, 500).trim();
+    if (!reason) return res.status(400).json({ error: '请填写举报原因' });
+
+    const report = await createReport({ postId, userId: req.user.id, reason });
+    res.json({ report });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/api/admin/reports', requireAdmin, async (req, res, next) => {
+  try {
+    const data = await getAllData();
+    const context = makeContext(data.users, data.posts, data.messages, req.user.id);
+    const reports = data.reports
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((report) => {
+        const post = data.posts.find((item) => item.id === report.postId);
+        return {
+          id: report.id,
+          reason: report.reason,
+          createdAt: report.createdAt,
+          reporter: publicUser(context.usersById.get(report.userId), req.user.id, context),
+          post: post ? postDto(post, req.user.id, data) : null
+        };
+      });
+    res.json({ reports });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/admin/posts/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const postId = Number(req.params.id);
+    const post = await findPost(postId);
+    if (!post) return res.status(404).json({ error: '帖子不存在' });
+    await deletePost(postId);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/admin/users/:id/ban', requireAdmin, async (req, res, next) => {
+  try {
+    const userId = Number(req.params.id);
+    if (userId === req.user.id) return res.status(400).json({ error: '不能封禁自己' });
+    const user = await getUserById(userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    const banned = await banUser(userId);
+    res.json({ user: publicUser(banned, req.user.id) });
   } catch (err) {
     next(err);
   }

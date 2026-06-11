@@ -2,6 +2,19 @@
 
 一个 Node.js + Express 社区网站，支持注册登录、头像、资料页、动态、评论、点赞和私信。
 
+## 18+ 社区治理
+
+网站包含基础成人社区治理能力：
+
+- 18+ 年龄确认入口
+- 首页社区规则说明
+- 用户可举报帖子
+- 管理员可查看举报
+- 管理员可删除帖子
+- 管理员可封禁用户
+
+这不是先审后发模式，用户发布后会立即展示；管理员通过举报后台进行事后处理。
+
 ## 本地运行
 
 ```bash
@@ -39,6 +52,14 @@ CLOUDINARY_CLOUD_NAME=你的 Cloudinary cloud name
 CLOUDINARY_API_KEY=你的 Cloudinary api key
 CLOUDINARY_API_SECRET=你的 Cloudinary api secret
 ```
+
+管理员可以删除帖子、封禁用户、查看举报。你可以设置：
+
+```text
+ADMIN_USERNAMES=你的账号名
+```
+
+如果不设置，数据库里的第一个用户会自动拥有管理员权限。
 
 如果你使用 Cloudinary 的单条连接地址，也可以只设置：
 

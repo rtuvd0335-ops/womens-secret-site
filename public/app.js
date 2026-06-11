@@ -29,6 +29,13 @@ const els = {
   toast: $('#toast'),
   profileDialog: $('#profileDialog'),
   profileDialogBody: $('#profileDialogBody'),
+  reportDialog: $('#reportDialog'),
+  reportForm: $('#reportForm'),
+  adminNav: $('#adminNav'),
+  adminReports: $('#adminReports'),
+  ageGate: $('#ageGate'),
+  ageAcceptBtn: $('#ageAcceptBtn'),
+  ageLeaveBtn: $('#ageLeaveBtn'),
   meName: $('#meName'),
   meAccount: $('#meAccount'),
   myAvatarBtn: $('#myAvatarBtn'),
@@ -42,7 +49,8 @@ const panelTitles = {
   feedPanel: '动态',
   peoplePanel: '用户',
   inboxPanel: '私信',
-  settingsPanel: '我的'
+  settingsPanel: '我的',
+  adminPanel: '管理'
 };
 
 function escapeHtml(text) {
@@ -134,6 +142,7 @@ function renderMe() {
   els.settingsAccount.textContent = `@${state.me.username}`;
   setAvatarButton(els.myAvatarBtn, state.me);
   setAvatarButton(els.settingsAvatar, state.me);
+  els.adminNav?.classList.toggle('hidden', !state.me.isAdmin);
 
   els.profileForm.nickname.value = state.me.nickname || '';
   els.profileForm.bio.value = state.me.bio || '';
@@ -161,11 +170,19 @@ async function loadThreads() {
   renderThreads();
 }
 
+async function loadAdminReports() {
+  if (!state.me?.isAdmin || !els.adminReports) return;
+  const data = await api('/api/admin/reports');
+  renderAdminReports(data.reports || []);
+}
+
 function switchPanel(panelId) {
+  if (panelId === 'adminPanel' && !state.me?.isAdmin) return showToast('需要管理员权限');
   state.activePanel = panelId;
   $$('.panel-view').forEach((panel) => panel.classList.toggle('active', panel.id === panelId));
   $$('.nav-item').forEach((item) => item.classList.toggle('active', item.dataset.panel === panelId));
   els.panelTitle.textContent = panelTitles[panelId] || '社区';
+  if (panelId === 'adminPanel') loadAdminReports().catch((err) => showToast(err.message));
 }
 
 function renderPosts() {
@@ -200,6 +217,8 @@ function renderPosts() {
         <div class="post-actions">
           <button class="chip-btn ${post.likedByMe ? 'active' : ''}" data-action="like" type="button">喜欢 ${post.likesCount}</button>
           <button class="chip-btn" data-action="focus-comment" type="button">评论 ${post.comments.length}</button>
+          ${state.me ? `<button class="chip-btn" data-action="report" type="button">举报</button>` : ''}
+          ${state.me?.isAdmin ? `<button class="chip-btn danger" data-action="admin-delete-post" type="button">删除</button>` : ''}
         </div>
         <div class="comment-list">
           ${comments || '<p class="muted">还没有评论</p>'}
@@ -209,6 +228,39 @@ function renderPosts() {
           <button class="outline-btn small" type="submit" ${state.me ? '' : 'disabled'}>发送</button>
         </form>
       </article>`;
+  }).join('');
+}
+
+function renderAdminReports(reports) {
+  if (!reports.length) {
+    els.adminReports.innerHTML = '<div class="empty-state">目前没有举报。</div>';
+    return;
+  }
+
+  els.adminReports.innerHTML = reports.map((report) => {
+    const post = report.post;
+    const author = post?.author;
+    return `
+      <article class="admin-card" data-post-id="${post?.id || ''}" data-user-id="${author?.id || ''}">
+        <div class="admin-card-head">
+          <strong>举报 #${report.id}</strong>
+          <span>${formatTime(report.createdAt)}</span>
+        </div>
+        <p><strong>原因：</strong>${escapeHtml(report.reason)}</p>
+        <p><strong>举报人：</strong>${report.reporter ? escapeHtml(report.reporter.nickname) : '未知用户'}</p>
+        ${post ? `
+          <div class="reported-post">
+            <p><strong>作者：</strong>${escapeHtml(author?.nickname || '未知用户')} @${escapeHtml(author?.username || '')}</p>
+            <p>${escapeHtml(post.content || '发布了一张图片')}</p>
+            ${post.imageUrl ? `<img src="${escapeHtml(post.imageUrl)}" alt="被举报图片" />` : ''}
+          </div>
+          <div class="card-actions">
+            <button class="outline-btn small" data-admin-action="delete-post" type="button">删除帖子</button>
+            <button class="solid-btn small danger-solid" data-admin-action="ban-user" type="button">封禁作者</button>
+          </div>
+        ` : '<p class="muted">该帖子已经被删除。</p>'}
+      </article>
+    `;
   }).join('');
 }
 
@@ -418,6 +470,18 @@ els.feed.addEventListener('click', async (event) => {
   if (button.dataset.action === 'focus-comment') {
     $('input[name="content"]', card)?.focus();
   }
+
+  if (button.dataset.action === 'report') {
+    els.reportForm.postId.value = postId;
+    els.reportForm.reason.value = '';
+    els.reportDialog.showModal();
+  }
+
+  if (button.dataset.action === 'admin-delete-post') {
+    if (!confirm('确定删除这条帖子吗？')) return;
+    await api(`/api/admin/posts/${postId}`, { method: 'DELETE' }).catch((err) => showToast(err.message));
+    await loadPosts();
+  }
 });
 
 els.feed.addEventListener('submit', async (event) => {
@@ -521,4 +585,67 @@ els.profileDialog.addEventListener('click', async (event) => {
   }
 });
 
+els.reportDialog.addEventListener('click', (event) => {
+  if (event.target.matches('[data-close-report]')) els.reportDialog.close();
+});
+
+els.reportForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = new FormData(els.reportForm);
+  try {
+    await api('/api/reports', {
+      method: 'POST',
+      body: {
+        postId: form.get('postId'),
+        reason: form.get('reason')
+      }
+    });
+    els.reportDialog.close();
+    showToast('举报已提交');
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+els.adminReports?.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-admin-action]');
+  if (!button) return;
+  const card = button.closest('.admin-card');
+  const postId = card?.dataset.postId;
+  const userId = card?.dataset.userId;
+
+  try {
+    if (button.dataset.adminAction === 'delete-post' && postId) {
+      if (!confirm('确定删除这条帖子吗？')) return;
+      await api(`/api/admin/posts/${postId}`, { method: 'DELETE' });
+      showToast('帖子已删除');
+    }
+
+    if (button.dataset.adminAction === 'ban-user' && userId) {
+      if (!confirm('确定封禁这个用户吗？')) return;
+      await api(`/api/admin/users/${userId}/ban`, { method: 'POST' });
+      showToast('用户已封禁');
+    }
+
+    await Promise.all([loadAdminReports(), loadPosts(), loadUsers()]);
+  } catch (err) {
+    showToast(err.message);
+  }
+});
+
+function initAgeGate() {
+  if (localStorage.getItem('secretGardenAgeOk') === 'yes') return;
+  els.ageGate?.classList.remove('hidden');
+}
+
+els.ageAcceptBtn?.addEventListener('click', () => {
+  localStorage.setItem('secretGardenAgeOk', 'yes');
+  els.ageGate.classList.add('hidden');
+});
+
+els.ageLeaveBtn?.addEventListener('click', () => {
+  window.location.href = 'https://www.google.com';
+});
+
+initAgeGate();
 refreshAll().catch((err) => showToast(err.message));

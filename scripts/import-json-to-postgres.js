@@ -41,6 +41,8 @@ function migrateJsonDb(source) {
     comments: Array.isArray(source.comments) ? source.comments : [],
     likes: Array.isArray(source.likes) ? source.likes : [],
     messages: Array.isArray(source.messages) ? source.messages : []
+    ,
+    reports: Array.isArray(source.reports) ? source.reports : []
   };
 
   db.users = db.users.map((user) => {
@@ -55,6 +57,7 @@ function migrateJsonDb(source) {
       bio: cleanText(user.bio, 180).trim(),
       location: cleanText(user.location, 24).trim(),
       interests: normalizeInterests(user.interests || ''),
+      bannedAt: user.bannedAt || null,
       createdAt: user.createdAt || new Date().toISOString(),
       updatedAt: user.updatedAt || user.createdAt || new Date().toISOString()
     };
@@ -91,6 +94,14 @@ function migrateJsonDb(source) {
     readAt: message.readAt || null
   })).filter((message) => message.id && message.fromUserId && message.toUserId && message.content);
 
+  db.reports = db.reports.map((report) => ({
+    id: Number(report.id),
+    postId: Number(report.postId),
+    userId: Number(report.userId),
+    reason: cleanText(report.reason, 500).trim(),
+    createdAt: report.createdAt || new Date().toISOString()
+  })).filter((report) => report.id && report.postId && report.userId && report.reason);
+
   return db;
 }
 
@@ -105,6 +116,7 @@ async function ensureSchema() {
       bio TEXT NOT NULL DEFAULT '',
       location TEXT NOT NULL DEFAULT '',
       interests TEXT[] NOT NULL DEFAULT '{}',
+      banned_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
@@ -140,6 +152,16 @@ async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       read_at TIMESTAMPTZ
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;
+
+    CREATE TABLE IF NOT EXISTS reports (
+      id SERIAL PRIMARY KEY,
+      post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }
 
@@ -148,8 +170,8 @@ async function importData(db) {
   try {
     for (const user of db.users) {
       await pool.query(
-        `INSERT INTO users (id, username, nickname, password_hash, avatar_url, bio, location, interests, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO users (id, username, nickname, password_hash, avatar_url, bio, location, interests, banned_at, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (username) DO UPDATE SET
            nickname = EXCLUDED.nickname,
            password_hash = EXCLUDED.password_hash,
@@ -157,8 +179,9 @@ async function importData(db) {
            bio = EXCLUDED.bio,
            location = EXCLUDED.location,
            interests = EXCLUDED.interests,
+           banned_at = EXCLUDED.banned_at,
            updated_at = EXCLUDED.updated_at`,
-        [user.id, user.username, user.nickname, user.passwordHash, user.avatarUrl, user.bio, user.location, user.interests, user.createdAt, user.updatedAt]
+        [user.id, user.username, user.nickname, user.passwordHash, user.avatarUrl, user.bio, user.location, user.interests, user.bannedAt, user.createdAt, user.updatedAt]
       );
     }
 
@@ -196,10 +219,20 @@ async function importData(db) {
       );
     }
 
+    for (const report of db.reports) {
+      await pool.query(
+        `INSERT INTO reports (id, post_id, user_id, reason, created_at)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (id) DO UPDATE SET reason = EXCLUDED.reason`,
+        [report.id, report.postId, report.userId, report.reason, report.createdAt]
+      );
+    }
+
     await pool.query("SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE((SELECT MAX(id) FROM users), 1))");
     await pool.query("SELECT setval(pg_get_serial_sequence('posts', 'id'), COALESCE((SELECT MAX(id) FROM posts), 1))");
     await pool.query("SELECT setval(pg_get_serial_sequence('comments', 'id'), COALESCE((SELECT MAX(id) FROM comments), 1))");
     await pool.query("SELECT setval(pg_get_serial_sequence('messages', 'id'), COALESCE((SELECT MAX(id) FROM messages), 1))");
+    await pool.query("SELECT setval(pg_get_serial_sequence('reports', 'id'), COALESCE((SELECT MAX(id) FROM reports), 1))");
     await pool.query('COMMIT');
   } catch (err) {
     await pool.query('ROLLBACK');
@@ -212,7 +245,7 @@ async function importData(db) {
   await ensureSchema();
   await importData(db);
   await pool.end();
-  console.log(`Imported ${db.users.length} users, ${db.posts.length} posts, ${db.comments.length} comments, ${db.likes.length} likes, ${db.messages.length} messages.`);
+  console.log(`Imported ${db.users.length} users, ${db.posts.length} posts, ${db.comments.length} comments, ${db.likes.length} likes, ${db.messages.length} messages, ${db.reports.length} reports.`);
 })().catch(async (err) => {
   console.error(err);
   await pool.end().catch(() => {});
